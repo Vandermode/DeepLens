@@ -35,13 +35,16 @@ def run_single_comparison(
     # 2. Optimize with Adam
     set_seed(0)
     lens_adam = GeoLens(filename=lens_path)
+    target_efl = float(lens_init.foclen) if hasattr(lens_init, "foclen") else None
     adam_dir = f"{result_base_dir}/{benchmark_name}_adam"
-    print(f"\n--- Running Adam Optimizer ({adam_iters} iterations) ---")
+    print(f"\n--- Running Adam Optimizer ({adam_iters} iterations, target_efl={target_efl}) ---")
     t0 = time.time()
     lens_adam.optimize(
         lrs=[1e-3, 1e-4, 1e-1, 1e-4],
         iterations=adam_iters,
         test_per_iter=max(1, adam_iters // 5),
+        target_efl=target_efl,
+        solve_surf_idx=-1,
         shape_control=shape_control,
         optim_mat=False,
         result_dir=adam_dir,
