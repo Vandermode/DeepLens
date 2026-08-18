@@ -146,16 +146,9 @@ DeepLens/
 │   ├── geolens_pkg/        (eval, optim, vis, io mixins)
 │   └── surrogate/          (MLP, Siren neural surrogates)
 │
-├── 0_hello_geolens.py     (code tutorials)
+├── ...
+└── write_your_own_code.py
 ```
-
-## ⚡ 2nd-Order Levenberg-Marquardt Optimizer & Differentiable Paraxial Solvers
-
-DeepLens supports native **Levenberg-Marquardt (LM)** damped Gauss-Newton 2nd-order optimization powered by PyTorch forward-mode automatic differentiation (`torch.autograd.forward_ad`), coupled with **analytic ABCD matrix paraxial solves**.
-
-- **From-Scratch Design**: Solve target focal length ($F_{\text{target}}$) and paraxial focus ($d_{\text{sensor}}$) algebraically in 0 steps from flat parallel glass plates.
-- **10–50× Faster Convergence**: Eliminates thousands of gradient iterations, achieving up to **93.4% aberration reduction in under 40 LM steps**.
-- **Official Reproduction & Benchmarks**: See [**TEST_RESULTS.md**](./TEST_RESULTS.md) for complete experimental comparison tables and reproduction scripts across Toy Doublets, Cooke Triplets, and Smartphone lenses.
 
 ## Community
 
