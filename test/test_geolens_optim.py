@@ -167,3 +167,56 @@ class TestGradientFlow:
                 has_grad = True
                 break
         assert has_grad, "No gradients found on lens parameters after backward()"
+
+
+class TestLMOptimizer:
+    """Unit tests for the Levenberg-Marquardt (LM) optimizer in DeepLens."""
+
+    def test_lm_optimizer_init(self, sample_cellphone_lens):
+        """GeoLensLMOptimizer correctly identifies trainable parameter tensors."""
+        from deeplens.opt.lm import GeoLensLMOptimizer
+
+        lens = sample_cellphone_lens
+        lm_opt = GeoLensLMOptimizer(lens, optim_mat=False)
+        assert lm_opt.n_var > 0
+        assert len(lm_opt.param_ptrs) == lm_opt.n_var
+
+        # Test flattening and unflattening round-trip
+        flat = lm_opt.get_flat_params()
+        assert flat.dim() == 1
+        assert flat.numel() == lm_opt.n_var
+        assert not torch.isnan(flat).any()
+
+        # Unflatten and verify parameters unchanged
+        lm_opt.set_flat_params(flat)
+        flat_after = lm_opt.get_flat_params()
+        assert torch.allclose(flat, flat_after)
+
+    def test_lm_step_execution(self, sample_singlet_lens):
+        """GeoLensLMOptimizer completes a forward-mode step and returns finite loss."""
+        from deeplens.opt.lm import GeoLensLMOptimizer
+
+        lens = sample_singlet_lens
+        lens.calc_pupil()
+        lm_opt = GeoLensLMOptimizer(lens, optim_mat=False, lm_lambda=1.0)
+
+        num_ring, num_arm, spp = 4, 4, 64
+        rays_list = [
+            lens.sample_ring_arm_rays(
+                num_ring=num_ring, num_arm=num_arm, spp=spp, depth=lens.obj_depth, wvln=wv
+            )
+            for wv in lens.wvln_rgb
+        ]
+        pinhole_ref = -lens.psf_center(points_obj=rays_list[0].o[:, :, 0, :], method="pinhole")
+
+        init_r = lm_opt.compute_residuals(rays_list, pinhole_ref)
+        assert init_r.numel() > 0
+        assert not torch.isnan(init_r).any()
+
+        # Step
+        import math
+        loss, accepted = lm_opt.step(rays_list, pinhole_ref, shape_control=False)
+        assert isinstance(loss, float)
+        assert not math.isnan(loss)
+        assert isinstance(accepted, bool)
+
