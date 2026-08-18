@@ -950,3 +950,91 @@ class GeoLensOptim:
         optimizer = torch.optim.Adam(params)
         # optimizer = torch.optim.SGD(params)
         return optimizer
+
+    def optimize_lm(
+        self,
+        iterations=200,
+        test_per_iter=20,
+        optim_mat=False,
+        shape_control=True,
+        sample_more_off_axis=False,
+        lm_lambda=0.1,
+        result_dir=None,
+    ):
+        """Optimize the lens using the Levenberg-Marquardt (LM) algorithm.
+
+        Computes the forward-mode Jacobian of transverse ray aberrations and
+        solves the damped Gauss-Newton normal equations:
+            (J^T J + lambda * diag(J^T J)) Delta = -J^T r
+
+        Args:
+            iterations (int, optional): Total LM steps. Defaults to 200.
+            test_per_iter (int, optional): Log and evaluate every N steps. Defaults to 20.
+            optim_mat (bool, optional): Whether to include material parameters. Defaults to False.
+            shape_control (bool, optional): Whether to apply geometric shape corrections. Defaults to True.
+            sample_more_off_axis (bool, optional): Concentrate ray samples toward field edges. Defaults to False.
+            lm_lambda (float, optional): Initial LM damping parameter. Defaults to 0.1.
+            result_dir (str, optional): Directory to save logs and intermediate designs. Defaults to None.
+        """
+        from ..opt.lm import GeoLensLMOptimizer
+
+        depth = self.obj_depth
+        num_ring = 16
+        num_arm = 8
+        spp = 256
+
+        if result_dir is None:
+            result_dir = f"./results/{datetime.now().strftime('%m%d-%H%M%S')}-DesignLens-LM"
+
+        os.makedirs(result_dir, exist_ok=True)
+        if not logging.getLogger().hasHandlers():
+            logger = logging.getLogger()
+            logger.setLevel("DEBUG")
+            fmt = logging.Formatter("%(asctime)s:%(levelname)s:%(message)s", "%Y-%m-%d %H:%M:%S")
+            sh = logging.StreamHandler()
+            sh.setFormatter(fmt)
+            sh.setLevel("INFO")
+            fh = logging.FileHandler(f"{result_dir}/output.log")
+            fh.setFormatter(fmt)
+            fh.setLevel("INFO")
+            logger.addHandler(sh)
+            logger.addHandler(fh)
+
+        logging.info(
+            f"[LM Optimizer] iterations:{iterations}, num_ring:{num_ring}, num_arm:{num_arm}, rays_per_fov:{spp}, init_lambda:{lm_lambda}"
+        )
+
+        lm_opt = GeoLensLMOptimizer(self, optim_mat=optim_mat, lm_lambda=lm_lambda)
+
+        pbar = tqdm(total=iterations + 1, desc="LM Progress", postfix={"loss_rms": 0})
+        for i in range(iterations + 1):
+            if i % test_per_iter == 0:
+                with torch.no_grad():
+                    if shape_control and i > 0:
+                        self.correct_shape()
+                    self.write_lens_json(f"{result_dir}/iter{i}.json")
+                    self.analysis(f"{result_dir}/iter{i}")
+
+                self.calc_pupil()
+                rays_backup = []
+                for wv in self.wvln_rgb:
+                    ray = self.sample_ring_arm_rays(
+                        num_ring=num_ring,
+                        num_arm=num_arm,
+                        spp=spp,
+                        depth=depth,
+                        wvln=wv,
+                        scale_pupil=1.05,
+                        sample_more_off_axis=sample_more_off_axis,
+                    )
+                    rays_backup.append(ray)
+                pinhole_ref = -self.psf_center(points_obj=rays_backup[0].o[:, :, 0, :], method="pinhole")
+
+            # Execute Levenberg-Marquardt step
+            loss, accepted = lm_opt.step(rays_backup, pinhole_ref, shape_control=shape_control)
+            pbar.set_postfix({"loss": f"{loss:.4e}", "lambda": f"{lm_opt.lm_lambda:.2e}", "accepted": accepted})
+            pbar.update(1)
+
+        pbar.close()
+        logging.info(f"LM Optimization complete. Final results saved to {result_dir}")
+
