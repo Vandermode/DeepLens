@@ -91,13 +91,13 @@ High-dimensional optimization of a commercial smartphone camera lens with 13 sur
 - **Focal Length**: $4.35\text{ mm}$
 - **Prescription File**: [`datasets/lenses/cellphone/cellphone80deg.json`](file:///home/weik/code/DeepLens/datasets/lenses/cellphone/cellphone80deg.json)
 
-### Multi-Field Optical Spot Evaluation (50 LM Iterations)
+### Multi-Field Optical Spot Evaluation (Adam vs. LM)
 
-| Field Position | Initial Spot Radius (RMS / Geo) | Levenberg-Marquardt Optimized (RMS / Geo) |
-| :--- | :--- | :--- |
-| **On-Axis ($0.0^\circ$ / Center)** | `6.33 µm` / `15.35 µm` | **`3.77 µm` / `14.05 µm`** |
-| **Mid-Field ($20.0^\circ$ / $0.5\times$)** | `4.66 µm` / `15.89 µm` | **`3.29 µm` / `8.04 µm`** |
-| **Edge-Field ($40.0^\circ$ / $1.0\times$)** | `14.55 µm` / `44.11 µm` | **`7.63 µm` / `25.04 µm`** |
+| Field Position | Initial Spot Radius (RMS / Geo) | Adam Optimizer (800 iters, 767.6s) | Levenberg-Marquardt (50 iters, ~700s) |
+| :--- | :--- | :--- | :--- |
+| **On-Axis ($0.0^\circ$ / Center)** | `6.33 µm` / `15.35 µm` | `4.39 µm` / `11.71 µm` | **`3.77 µm` / `14.05 µm`** |
+| **Mid-Field ($20.0^\circ$ / $0.5\times$)** | `4.66 µm` / `15.89 µm` | `4.22 µm` / `12.12 µm` | **`3.29 µm` / `8.04 µm`** |
+| **Edge-Field ($40.0^\circ$ / $1.0\times$)** | `14.55 µm` / `44.11 µm` | `8.43 µm` / `40.14 µm` | **`7.63 µm` / `25.04 µm` (-38% blur)** |
 
 ### CLI Reproduction Command
 ```bash
