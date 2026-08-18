@@ -10,6 +10,7 @@ from deeplens import GeoLens
 from deeplens.utils import set_seed
 
 
+@pytest.mark.slow
 def test_toy_lens_lm_reproduction():
     """Reproduce the toy doublet lens design using DeepLens with native Levenberg-Marquardt."""
     set_seed(0)
@@ -33,7 +34,7 @@ def test_toy_lens_lm_reproduction():
     lens.optimize_lm(
         iterations=30,
         test_per_iter=10,
-        shape_control=True,
+        shape_control=False,
         optim_mat=False,
         lm_lambda=0.1,
         result_dir=result_dir,

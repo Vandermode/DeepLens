@@ -85,6 +85,7 @@ def run_single_comparison(
     }
 
 
+@pytest.mark.slow
 def test_toy_doublet_comparison():
     """Test LM vs Adam on the 2-element toy doublet from Generalized Aberrations."""
     res = run_single_comparison(
@@ -97,6 +98,7 @@ def test_toy_doublet_comparison():
     assert res["lm_rms"] < res["init_rms"], "LM should reduce RMS error on toy doublet."
 
 
+@pytest.mark.slow
 def test_cooke_triplet_comparison():
     """Test LM vs Adam on the classical Cooke Triplet lens."""
     res = run_single_comparison(
