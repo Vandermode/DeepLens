@@ -619,7 +619,6 @@ class GeoLensOptim:
         y = depth * torch.tan(ring_grid) * torch.sin(arm_grid)
         z = torch.full_like(x, depth)
         points = torch.stack([x, y, z], dim=-1)  # shape: [num_ring, num_arm, 3]
-
         # Sample rays
         rays = self.sample_from_points(
             points=points, num_rays=spp, wvln=wvln, scale_pupil=scale_pupil
@@ -631,15 +630,17 @@ class GeoLensOptim:
         lrs=[1e-3, 1e-4, 1e-1, 1e-4],
         iterations=5000,
         test_per_iter=100,
+        target_efl=None,
+        solve_surf_idx=-1,
         optim_mat=False,
         shape_control=True,
         sample_more_off_axis=False,
         result_dir=None,
     ):
-        """Optimise the lens by minimising RGB RMS spot errors.
+        """Optimize the lens by minimizing RMS spot size.
 
-        Runs a curriculum-learning training loop with Adam optimiser and cosine
-        annealing. Periodically evaluates the lens, saves intermediate results,
+        Runs an Adam optimization loop with cosine annealing.
+        Periodically evaluates the lens, saves intermediate results,
         and optionally corrects surface shapes.
 
         Args:
@@ -648,6 +649,9 @@ class GeoLensOptim:
             iterations (int, optional): Total training iterations. Defaults to 5000.
             test_per_iter (int, optional): Evaluate and save every N iterations.
                 Defaults to 100.
+            target_efl (float, optional): If provided, dynamically locks system EFL and
+                sensor position via paraxial ABCD solve on every step. Defaults to None.
+            solve_surf_idx (int, optional): Surface index for curvature solve. Defaults to -1.
             optim_mat (bool, optional): If True, include material parameters (n, V)
                 in optimisation. Defaults to False.
             shape_control (bool, optional): If True, call ``correct_shape()`` at each
@@ -699,6 +703,10 @@ class GeoLensOptim:
         logging.info(
             "If Out-of-Memory, try to reduce num_ring, num_arm, and rays_per_fov."
         )
+
+        if target_efl is not None:
+            from ..opt.paraxial import apply_paraxial_solve
+            apply_paraxial_solve(self, target_efl=target_efl, solve_surf_idx=solve_surf_idx)
 
         # Optimizer and scheduler
         optimizer = self.get_optimizer(lrs, optim_mat=optim_mat)
@@ -808,6 +816,10 @@ class GeoLensOptim:
             L_total.backward()
             optimizer.step()
             scheduler.step()
+
+            if target_efl is not None:
+                from ..opt.paraxial import apply_paraxial_solve
+                apply_paraxial_solve(self, target_efl=target_efl, solve_surf_idx=solve_surf_idx)
 
             pbar.set_postfix(
                 loss_rms=loss_rms.item(),
