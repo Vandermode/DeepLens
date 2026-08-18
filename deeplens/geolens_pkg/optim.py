@@ -955,6 +955,8 @@ class GeoLensOptim:
         self,
         iterations=200,
         test_per_iter=20,
+        target_efl=None,
+        solve_surf_idx=-1,
         optim_mat=False,
         shape_control=True,
         sample_more_off_axis=False,
@@ -970,6 +972,8 @@ class GeoLensOptim:
         Args:
             iterations (int, optional): Total LM steps. Defaults to 200.
             test_per_iter (int, optional): Log and evaluate every N steps. Defaults to 20.
+            target_efl (float, optional): Desired focal length in mm for paraxial ABCD solve. Defaults to None.
+            solve_surf_idx (int, optional): Surface index for curvature solve. Defaults to -1.
             optim_mat (bool, optional): Whether to include material parameters. Defaults to False.
             shape_control (bool, optional): Whether to apply geometric shape corrections. Defaults to True.
             sample_more_off_axis (bool, optional): Concentrate ray samples toward field edges. Defaults to False.
@@ -1001,10 +1005,16 @@ class GeoLensOptim:
             logger.addHandler(fh)
 
         logging.info(
-            f"[LM Optimizer] iterations:{iterations}, num_ring:{num_ring}, num_arm:{num_arm}, rays_per_fov:{spp}, init_lambda:{lm_lambda}"
+            f"[LM Optimizer] iterations:{iterations}, target_efl:{target_efl}, rays_per_fov:{spp}, init_lambda:{lm_lambda}"
         )
 
-        lm_opt = GeoLensLMOptimizer(self, optim_mat=optim_mat, lm_lambda=lm_lambda)
+        lm_opt = GeoLensLMOptimizer(
+            self,
+            target_efl=target_efl,
+            solve_surf_idx=solve_surf_idx,
+            optim_mat=optim_mat,
+            lm_lambda=lm_lambda,
+        )
 
         pbar = tqdm(total=iterations + 1, desc="LM Progress", postfix={"loss_rms": 0})
         for i in range(iterations + 1):

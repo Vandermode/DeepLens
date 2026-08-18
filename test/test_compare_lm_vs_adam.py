@@ -50,15 +50,18 @@ def run_single_comparison(
     adam_rms = lens_adam.loss_rms(num_grid=16, num_rays=256).item()
     print(f"--> Adam Finished in {adam_time:.1f}s | Final RMS: {adam_rms * 1000:.2f} um")
 
-    # 3. Optimize with Levenberg-Marquardt (LM)
+    # 3. Optimize with Levenberg-Marquardt (LM) with Paraxial ABCD solve
     set_seed(0)
     lens_lm = GeoLens(filename=lens_path)
+    target_efl = float(lens_init.foclen) if hasattr(lens_init, "foclen") else None
     lm_dir = f"{result_base_dir}/{benchmark_name}_lm"
-    print(f"\n--- Running Levenberg-Marquardt Optimizer ({lm_iters} iterations) ---")
+    print(f"\n--- Running Levenberg-Marquardt Optimizer ({lm_iters} iterations, target_efl={target_efl}) ---")
     t0 = time.time()
     lens_lm.optimize_lm(
         iterations=lm_iters,
         test_per_iter=max(1, lm_iters // 5),
+        target_efl=target_efl,
+        solve_surf_idx=-1,
         shape_control=shape_control,
         optim_mat=False,
         lm_lambda=0.1,

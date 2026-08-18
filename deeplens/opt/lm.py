@@ -1,9 +1,10 @@
-"""Levenberg-Marquardt Optimizer for DeepLens GeoLens optical systems."""
+"""Levenberg-Marquardt Optimizer for DeepLens GeoLens optical systems with optional Paraxial ABCD Solve."""
 
 import time
 import logging
 import torch
 from typing import List, Tuple, Optional
+from .paraxial import apply_paraxial_solve
 
 
 class GeoLensLMOptimizer:
@@ -16,6 +17,9 @@ class GeoLensLMOptimizer:
 
     Args:
         lens: GeoLens optical system instance.
+        target_efl (float, optional): If provided, algebraically locks system EFL and BFL
+            via differentiable ABCD paraxial solve on every candidate step. Defaults to None.
+        solve_surf_idx (int): Surface index to solve curvature for target EFL. Defaults to -1.
         optim_mat (bool): Whether to optimize material refractive parameters.
         optim_surf_range (list): Surface indices to optimize. Defaults to all.
         lm_lambda (float): Initial damping parameter.
@@ -27,6 +31,8 @@ class GeoLensLMOptimizer:
     def __init__(
         self,
         lens,
+        target_efl: Optional[float] = None,
+        solve_surf_idx: int = -1,
         optim_mat: bool = False,
         optim_surf_range: Optional[List[int]] = None,
         lm_lambda: float = 0.1,
@@ -35,12 +41,17 @@ class GeoLensLMOptimizer:
         min_damp: float = 1e-6,
     ):
         self.lens = lens
+        self.target_efl = target_efl
+        self.solve_surf_idx = solve_surf_idx
         self.optim_mat = optim_mat
         self.optim_surf_range = optim_surf_range
         self.lm_lambda = lm_lambda
         self.lambda_up = lambda_up
         self.lambda_down = lambda_down
         self.min_damp = min_damp
+
+        if self.target_efl is not None:
+            apply_paraxial_solve(self.lens, target_efl=self.target_efl, solve_surf_idx=self.solve_surf_idx)
 
         # Activate requires_grad on trainable parameters
         self.param_groups = self.lens.get_optimizer_params(
@@ -52,7 +63,7 @@ class GeoLensLMOptimizer:
         self.n_var = len(self.param_ptrs)
 
         logging.info(
-            f"GeoLensLMOptimizer initialized with {self.n_var} active optical parameters."
+            f"GeoLensLMOptimizer initialized with {self.n_var} active optical parameters (target_efl={self.target_efl})."
         )
 
     def _collect_param_pointers(self) -> List[Tuple]:
@@ -63,15 +74,19 @@ class GeoLensLMOptimizer:
             if self.optim_surf_range is None
             else self.optim_surf_range
         )
+        
+        num_surfs = len(self.lens.surfaces)
+        actual_solve_idx = (num_surfs + self.solve_surf_idx) if self.solve_surf_idx < 0 else self.solve_surf_idx
 
         for idx in surfs_to_opt:
             surf = self.lens.surfaces[idx]
             # Surface distance / spacing d
             if hasattr(surf, "d") and isinstance(surf.d, torch.Tensor) and surf.d.requires_grad:
                 ptrs.append((surf, "d", None))
-            # Curvature c
+            # Curvature c (exclude if actively solved paraxially)
             if hasattr(surf, "c") and isinstance(surf.c, torch.Tensor) and surf.c.requires_grad:
-                ptrs.append((surf, "c", None))
+                if not (self.target_efl is not None and idx == actual_solve_idx):
+                    ptrs.append((surf, "c", None))
             # Conic constant k
             if hasattr(surf, "k") and isinstance(surf.k, torch.Tensor) and surf.k.requires_grad:
                 ptrs.append((surf, "k", None))
@@ -85,11 +100,12 @@ class GeoLensLMOptimizer:
                     for a_idx in range(surf.ai.numel()):
                         ptrs.append((surf, "ai", a_idx))
 
-        # Sensor distance
+        # Sensor distance (exclude if actively solved paraxially)
         if (
             hasattr(self.lens, "d_sensor")
             and isinstance(self.lens.d_sensor, torch.Tensor)
             and self.lens.d_sensor.requires_grad
+            and self.target_efl is None
         ):
             ptrs.append((self.lens, "d_sensor", None))
 
@@ -120,26 +136,35 @@ class GeoLensLMOptimizer:
                     getattr(obj, attr).copy_(val)
                 else:
                     getattr(obj, attr)[idx].copy_(val)
+            if self.target_efl is not None:
+                apply_paraxial_solve(self.lens, target_efl=self.target_efl, solve_surf_idx=self.solve_surf_idx)
 
     def compute_residuals(self, rays_list: list, pinhole_ref: torch.Tensor) -> torch.Tensor:
         """Compute transverse ray aberration vector across R, G, B wavelengths."""
+        if self.target_efl is not None:
+            apply_paraxial_solve(self.lens, target_efl=self.target_efl, solve_surf_idx=self.solve_surf_idx)
+
         res = []
         center_ref = None
         for wv_idx in [1, 0, 2]:  # green, red, blue
             ray = rays_list[wv_idx].clone()
             ray = self.lens.trace2sensor(ray)
 
+            centroid_xy = ray.centroid()[..., :2]
             if center_ref is None:
-                centroid_xy = ray.centroid()[..., :2]
                 center_ref = centroid_xy.detach().unsqueeze(-2)
 
-            ray_valid = ray.is_valid
-            ray_err = ray.o[..., :2] - center_ref
-            valid_mask = ray_valid.bool().unsqueeze(-1)
-            res.append(torch.masked_select(ray_err, valid_mask))
+            ray_valid = ray.is_valid.bool().unsqueeze(-1)
+            raw_err = ray.o[..., :2] - center_ref
+            
+            # Smooth clamped residual vector with restoring gradient for vignetted rays
+            clean_err = torch.where(
+                ray_valid,
+                raw_err,
+                torch.clamp(raw_err, -5.0, 5.0)
+            ).reshape(-1)
+            res.append(clean_err)
 
-        if len(res) == 0 or all(r.numel() == 0 for r in res):
-            return torch.tensor([10.0], device=self.lens.device)
         return torch.cat(res)
 
     def step(
@@ -172,6 +197,8 @@ class GeoLensLMOptimizer:
                 r_dual = self.compute_residuals(rays_list, pinhole_ref)
                 _, col_j = torch.autograd.forward_ad.unpack_dual(r_dual)
                 self.set_param_value(obj, attr, idx, orig_val)
+                if col_j is None:
+                    col_j = torch.zeros_like(current_r)
                 J_cols.append(col_j)
 
         J = torch.stack(J_cols, dim=1)  # Shape: [M, N]

@@ -36,11 +36,13 @@ def main() -> None:
     init_rms = lens.loss_rms(num_grid=16, num_rays=512).item()
     logging.info(f"Initial RMS Spot Error: {init_rms * 1000:.2f} um")
 
-    # Run Levenberg-Marquardt Optimization (e.g. 50-100 LM steps instead of 5,000-10,000 Adam steps)
-    logging.info("Starting Levenberg-Marquardt optimization...")
+    # Run Levenberg-Marquardt Optimization with Paraxial ABCD Solve
+    logging.info(f"Starting Levenberg-Marquardt optimization (target EFL = {lens.foclen:.2f} mm)...")
     lens.optimize_lm(
         iterations=50,
         test_per_iter=10,
+        target_efl=lens.foclen,
+        solve_surf_idx=-1,
         shape_control=True,
         optim_mat=False,
         lm_lambda=0.1,
