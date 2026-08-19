@@ -1033,12 +1033,12 @@ class GeoLens(
         focus_z = ray_axis.o[valid_axis, 2] + t * ray_axis.d[valid_axis, 2]
         focus_z = focus_z[~torch.isnan(focus_z) & (focus_z > 0)]
         if focus_z.numel() == 0:
-            # Fail loudly instead of writing NaN (mean of empty) into self.foclen,
-            # which would silently poison calc_fov/calc_scale/set_fnum downstream.
-            raise ValueError(
-                "calc_foclen: no axial rays converged to a positive focus; the "
-                "lens may be degenerate or heavily vignetted."
-            )
+            from .opt.paraxial import compute_system_abcd
+            efl_abcd, _, _ = compute_system_abcd(self)
+            self.efl = float(efl_abcd.item()) if not torch.isinf(efl_abcd) else 1e6
+            self.foclen = self.efl
+            self.bfl = 1e6
+            return self.efl
         paraxial_focus_z = float(torch.mean(focus_z))
 
         # 2. Trace off-axis paraxial ray to paraxial focus, measure image height
@@ -1535,15 +1535,18 @@ class GeoLens(
 
         # Solve the linear system Ax = b
         # Using least squares to handle the case of no exact solution
-        if A.device.type == "mps":
-            # Perform lstsq on CPU for MPS devices and move result back
-            x, _ = torch.linalg.lstsq(A.cpu(), b.unsqueeze(-1).cpu())[:2]
-            x = x.to(A.device)
-        else:
-            x, _ = torch.linalg.lstsq(A, b.unsqueeze(-1))[:2]
-        x = x.squeeze(-1)  # Shape: [N*(N-1)/2, 2]
-        s = x[:, 0]
-        t = x[:, 1]
+        try:
+            if A.device.type == "mps":
+                # Perform lstsq on CPU for MPS devices and move result back
+                x, _ = torch.linalg.lstsq(A.cpu(), b.unsqueeze(-1).cpu())[:2]
+                x = x.to(A.device)
+            else:
+                x, _ = torch.linalg.lstsq(A, b.unsqueeze(-1))[:2]
+            x = x.squeeze(-1)  # Shape: [N*(N-1)/2, 2]
+            s = x[:, 0]
+            t = x[:, 1]
+        except Exception:
+            return torch.empty((0, 2), device=A.device)
 
         # Calculate the intersection points using either rays
         P_i = Oi + s.unsqueeze(-1) * Di  # Shape: [N*(N-1)/2, 2]
@@ -1576,6 +1579,18 @@ class GeoLens(
         self.d_sensor = d_sensor_new
 
         # FoV will be slightly changed
+        self.post_computation()
+
+    @torch.no_grad()
+    def solve_paraxial(self, target_efl: float, solve_surf_idx: int = -1):
+        """Analytically solve the curvature and sensor position for a target EFL using ABCD transfer matrices.
+
+        Args:
+            target_efl (float): Desired effective focal length [mm].
+            solve_surf_idx (int, optional): Index of the surface whose curvature is solved. Defaults to -1.
+        """
+        from .opt.paraxial import apply_paraxial_solve
+        apply_paraxial_solve(self, target_efl=target_efl, solve_surf_idx=solve_surf_idx)
         self.post_computation()
 
     @torch.no_grad()

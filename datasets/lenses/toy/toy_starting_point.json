@@ -1,0 +1,86 @@
+{
+    "info": "Toy 2-Element Doublet Lens from Generalized Aberrations Paper (EFL=10mm, F/2.0, HFOV=30deg)",
+    "foclen": 10.0,
+    "fnum": 2.0,
+    "r_sensor": 5.7735,
+    "d_sensor": 13.0,
+    "sensor_size": [
+        8.16,
+        8.16
+    ],
+    "surfaces": [
+        {
+            "type": "Aperture",
+            "r": 2.5,
+            "c": 0.0,
+            "d": 0.0,
+            "d_next": 0.5,
+            "mat1": "air",
+            "mat2": "air"
+        },
+        {
+            "type": "Aspheric",
+            "use_ai2": false,
+            "r": 3.0,
+            "c": 0.0,
+            "d": 0.5,
+            "k": -1.0,
+            "ai": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "d_next": 1.0,
+            "mat1": "air",
+            "mat2": "n-bk7"
+        },
+        {
+            "type": "Aspheric",
+            "use_ai2": false,
+            "r": 3.0,
+            "c": 0.0,
+            "d": 1.5,
+            "k": -1.0,
+            "ai": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "d_next": 0.5,
+            "mat1": "n-bk7",
+            "mat2": "air"
+        },
+        {
+            "type": "Aspheric",
+            "use_ai2": false,
+            "r": 3.0,
+            "c": 0.0,
+            "d": 2.0,
+            "k": -1.0,
+            "ai": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "d_next": 2.0,
+            "mat1": "air",
+            "mat2": "n-bk7"
+        },
+        {
+            "type": "Aspheric",
+            "use_ai2": false,
+            "r": 3.0,
+            "c": -0.17424248,
+            "d": 4.0,
+            "k": -1.0,
+            "ai": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "d_next": 9.0,
+            "mat1": "n-bk7",
+            "mat2": "air"
+        }
+    ]
+}

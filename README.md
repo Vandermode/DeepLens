@@ -146,7 +146,6 @@ DeepLens/
 │   ├── geolens_pkg/        (eval, optim, vis, io mixins)
 │   └── surrogate/          (MLP, Siren neural surrogates)
 │
-├── 0_hello_geolens.py     (code tutorials)
 ├── ...
 └── write_your_own_code.py
 ```

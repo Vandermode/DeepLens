@@ -11,7 +11,7 @@ license = {text = "Apache-2.0"}
 authors = [
     {name = "Xinge Yang", email = "xinge.yang@kaust.edu.sa"}
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 keywords = [
     "optics",
     "lens design",

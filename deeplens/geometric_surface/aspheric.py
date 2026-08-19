@@ -373,7 +373,7 @@ class Aspheric(Surface):
             "type": "Aspheric",
             "r": round(self.r, 4),
             "(c)": round(self.c.item(), 4),
-            "roc": round(1 / self.c.item(), 4),
+            "roc": round(1 / self.c.item(), 4) if abs(self.c.item()) > 1e-8 else float("inf"),
             "d": round(self.d.item(), 4),
             "k": round(self.k.item(), 4),
             "ai": [],
